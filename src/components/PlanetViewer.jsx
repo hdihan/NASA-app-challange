@@ -13,7 +13,7 @@ export default function PlanetViewer({
   artifactFilter = 'abandoned'
 }) {
   const globeRef = useRef(null);
-  const isPausedRef = useRef(false); // shared ref for animation loop
+  const isPausedRef = useRef(false);
   const [isPaused, setIsPaused] = useState(false);
   const [windowDimensions, setWindowDimensions] = useState({
     width: typeof window !== 'undefined' ? window.innerWidth : 1200,
@@ -67,33 +67,17 @@ export default function PlanetViewer({
     return () => clearInterval(interval);
   }, []);
 
-  // Set initial camera & axial tilt per planet
+  // Set initial camera & axial tilt per planet without altering materials
   useEffect(() => {
     if (!globeRef.current) return;
 
     const globe = globeRef.current;
-    // Set axial tilt: Moon ~ 1.54°, Mars ~ 25.19°
     const tiltDeg = activePlanetId === 'mars' ? 25.19 : 1.54;
     const tiltRad = (tiltDeg * Math.PI) / 180;
 
     const scene = globe.scene();
     if (scene) {
       scene.rotation.z = tiltRad;
-
-      // Clean up previous materials & enforce pure lunar grey vs martian orange
-      scene.traverse((obj) => {
-        if (obj.isMesh && obj.material) {
-          if (activePlanetId === 'moon') {
-            if (obj.material.color) obj.material.color.setHex(0xdcdcdc);
-            obj.material.roughness = 0.95;
-            obj.material.metalness = 0.05;
-          } else {
-            if (obj.material.color) obj.material.color.setHex(0xffffff);
-            obj.material.roughness = 0.85;
-            obj.material.metalness = 0.1;
-          }
-        }
-      });
     }
 
     // Default initial orbital point of view
@@ -130,7 +114,7 @@ export default function PlanetViewer({
     }
   }, [selectedArtifact, activePlanetId]);
 
-  // Toggle pause — update both React state and the shared ref
+  // Toggle pause
   const handleTogglePause = useCallback(() => {
     isPausedRef.current = !isPausedRef.current;
     setIsPaused(isPausedRef.current);
@@ -187,7 +171,7 @@ export default function PlanetViewer({
 
         let angle = Math.random() * Math.PI * 2;
         satGroup.userData.animate = () => {
-          if (isPausedRef.current) return; // ← honour pause
+          if (isPausedRef.current) return;
           angle += cfg.speed;
           const x = Math.cos(angle) * cfg.radiusX;
           const z = Math.sin(angle) * cfg.radiusY;
@@ -233,7 +217,7 @@ export default function PlanetViewer({
 
       let angle = 0;
       satGroup.userData.animate = () => {
-        if (isPausedRef.current) return; // ← honour pause
+        if (isPausedRef.current) return;
         angle += 0.006;
         const x = Math.cos(angle) * orbitRadius;
         const z = Math.sin(angle) * (orbitRadius * 0.94);
@@ -244,14 +228,19 @@ export default function PlanetViewer({
       };
     }
 
-    // Also pause globe rotation via controls
+    // Animate satellites and celestial axial rotation (delta * 0.035)
     let reqId;
+    const clock = new THREE.Clock();
+
     const animateSatellites = () => {
       reqId = requestAnimationFrame(animateSatellites);
-      // Pause globe auto-rotate
-      if (globeRef.current && globeRef.current.controls) {
-        globeRef.current.controls().autoRotate = !isPausedRef.current;
+      const delta = clock.getDelta();
+
+      // Realistic slow celestial axial rotation pace
+      if (!isPausedRef.current && scene) {
+        scene.rotation.y += delta * 0.035;
       }
+
       scene.traverse((obj) => {
         if (obj.userData && typeof obj.userData.animate === 'function') {
           obj.userData.animate();
@@ -276,16 +265,17 @@ export default function PlanetViewer({
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden transition-opacity duration-700 ${
+      className={`relative w-full h-full overflow-hidden bg-[#040711] transition-opacity duration-700 ${
         isWarping ? 'opacity-20 scale-95 blur-sm' : 'opacity-100 scale-100 blur-0'
       }`}
     >
       <Globe
         ref={globeRef}
-        key={activePlanetId}
+        key={activePlanet?.id || activePlanetId}
         width={windowDimensions.width}
         height={windowDimensions.height}
-        backgroundColor="rgba(4, 7, 17, 0)"
+        backgroundColor="#040711"
+        backgroundImageUrl="/textures/2k_stars_milky_way.jpg"
         globeImageUrl={activePlanetId === 'moon' ? '/textures/2k_moon.jpg' : '/textures/2k_mars.jpg'}
         bumpImageUrl={activePlanet.bumpTexture || undefined}
         showAtmosphere={activePlanetId === 'mars'}
@@ -336,7 +326,7 @@ export default function PlanetViewer({
         htmlAltitude={0.015}
       />
 
-      {/* Orbital HUD Panel + Pause Button */}
+      {/* Orbital HUD Panel */}
       <div className="absolute bottom-6 left-6 z-10 hidden md:flex flex-col gap-2 pointer-events-auto">
         <div className="bg-slate-950/85 border border-cyan-500/30 backdrop-blur-md px-4 py-3 rounded-2xl shadow-2xl flex flex-col gap-2 max-w-sm text-white">
           <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
@@ -348,7 +338,6 @@ export default function PlanetViewer({
               <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
                 LIVE 3D
               </span>
-              {/* Pause Orbit Button */}
               <button
                 onClick={handleTogglePause}
                 className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[9px] font-mono font-bold border transition-all cursor-pointer ${
@@ -409,7 +398,7 @@ export default function PlanetViewer({
             </div>
           )}
 
-          {/* Explicit Earth Distance Telemetry readout */}
+          {/* Earth Distance Telemetry readout */}
           <div className="mt-2 pt-2 border-t border-slate-800 text-[11px] font-mono text-cyan-300 font-semibold flex items-center justify-between">
             <span>📍 {activePlanet.distanceDisplay}</span>
           </div>

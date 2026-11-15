@@ -155,9 +155,11 @@ export default function App() {
         onClose={() => setIsCitationsOpen(false)}
       />
 
-      {/* 8. Floating AI Voice Bot Companion */}
+      {/* 8. Floating AI Voice Bot Companion (Docked cleanly at bottom-5 left-5) */}
       <AiVoiceBot
+        activePlanetId={activePlanetId}
         activeArtifact={isDrawerOpen ? selectedArtifact : null}
+        isDrawerOpen={isDrawerOpen}
         isMuted={isMuted}
       />
     </div>

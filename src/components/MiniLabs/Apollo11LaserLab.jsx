@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, RotateCcw, Activity, Award, Radio } from 'lucide-react';
+import { Play, RotateCcw, Award, Sparkles } from 'lucide-react';
 import { soundEffects } from '../../services/soundEffects';
 
 export default function Apollo11LaserLab() {
@@ -9,6 +9,7 @@ export default function Apollo11LaserLab() {
   const [photonsReturned, setPhotonsReturned] = useState(0);
   const animRef = useRef(null);
   const startTimeRef = useRef(0);
+  const stageRef = useRef(null);
 
   // Speed of light in km/s: 299,792.458
   // Distance: ~384,400 km -> Round-trip: 768,800 km -> ~2.564 seconds
@@ -21,6 +22,9 @@ export default function Apollo11LaserLab() {
     setPhotonsReturned(0);
     soundEffects.playLaserFire();
     startTimeRef.current = performance.now();
+
+    // Auto-scroll stage into view smoothly if needed
+    stageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     const animate = (now) => {
       const elapsed = now - startTimeRef.current;
@@ -35,7 +39,7 @@ export default function Apollo11LaserLab() {
       } else {
         setStatus('completed');
         soundEffects.playLaserEcho();
-        setPhotonsReturned(Math.floor(1 + Math.random() * 4)); // Only a few photons survive the 768,800 km journey!
+        setPhotonsReturned(Math.floor(1 + Math.random() * 4));
       }
     };
 
@@ -55,7 +59,6 @@ export default function Apollo11LaserLab() {
     };
   }, []);
 
-  const progress = Math.min(elapsedMs / TOTAL_SIM_DURATION_MS, 1);
   const currentDistanceKm = status === 'firing'
     ? Math.round((elapsedMs / (TOTAL_SIM_DURATION_MS / 2)) * 384400)
     : status === 'returning' || status === 'completed'
@@ -63,36 +66,51 @@ export default function Apollo11LaserLab() {
     : 0;
 
   return (
-    <div className="bg-space-900/90 border border-cyan-500/30 rounded-xl p-5 text-white flex flex-col gap-4 shadow-xl">
-      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping" />
-          <span className="text-xs uppercase tracking-widest font-mono text-cyan-400">Engineering Mini-Lab 01</span>
+    <div className="bg-space-900/95 border border-cyan-500/30 rounded-xl p-3 text-white flex flex-col gap-2.5 shadow-xl select-none">
+      {/* Compact Header with Fire Controls Right on Top */}
+      <div className="flex items-center justify-between border-b border-cyan-500/20 pb-2 gap-2">
+        <div className="flex items-center gap-1.5 truncate">
+          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
+          <span className="text-[11px] font-heading font-bold text-white truncate">
+            Earth-to-Moon Laser Ranging (LRRR)
+          </span>
         </div>
-        <span className="text-xs text-slate-400 font-mono">NSSDCA DE421 Grounding</span>
+
+        {/* Action Controls Docked Right at Top so User NEVER Has to Scroll! */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={handleFireLaser}
+            disabled={status === 'firing' || status === 'returning'}
+            className="hud-button py-1 px-3 rounded-lg font-heading text-xs uppercase tracking-wider font-bold text-white flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-[0_0_12px_rgba(52,211,153,0.4)]"
+          >
+            <Play className="w-3 h-3 text-emerald-400 fill-emerald-400" />
+            <span>{status === 'firing' ? 'Firing...' : status === 'returning' ? 'Echoing...' : 'Fire Laser'}</span>
+          </button>
+          <button
+            onClick={handleReset}
+            className="p-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 cursor-pointer transition-colors"
+            title="Reset Simulator"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        </div>
       </div>
 
-      <div>
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          Earth-to-Moon Laser Ranging Experiment
-        </h3>
-        <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-          Fire a 532nm green Nd:YAG laser pulse from Apache Point Observatory to Apollo 11's 100 corner-cube retroreflector array. Measure the photon round-trip time to prove lunar recession.
-        </p>
-      </div>
-
-      {/* Visual Animation Stage */}
-      <div className="relative h-36 bg-slate-950/80 rounded-lg border border-cyan-500/20 overflow-hidden flex items-center px-6">
+      {/* Visual Animation Stage - Immediate Direct Visibility */}
+      <div
+        ref={stageRef}
+        className="relative h-24 bg-slate-950/90 rounded-lg border border-cyan-500/30 overflow-hidden flex items-center px-4 shadow-inner"
+      >
         {/* Earth Station */}
-        <div className="flex flex-col items-center z-10">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-blue-700 via-emerald-600 to-sky-400 border border-cyan-300 shadow-lg flex items-center justify-center text-[10px] font-bold">
+        <div className="flex flex-col items-center z-10 shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-700 via-emerald-600 to-sky-400 border border-cyan-300 shadow-md flex items-center justify-center text-[8px] font-bold">
             EARTH
           </div>
-          <span className="text-[10px] font-mono text-cyan-300 mt-1">Observatory</span>
+          <span className="text-[8px] font-mono text-cyan-300 mt-0.5">Observatory</span>
         </div>
 
         {/* Laser Path Line */}
-        <div className="flex-1 relative mx-4 h-1 bg-slate-800">
+        <div className="flex-1 relative mx-3 h-1 bg-slate-800">
           {/* Firing Beam (Earth -> Moon) */}
           {status === 'firing' && (
             <div
@@ -116,7 +134,7 @@ export default function Apollo11LaserLab() {
             <div className="absolute top-0 left-0 w-full h-full bg-emerald-400/40" />
           )}
 
-          {/* Photon pulse head */}
+          {/* Glowing Photon Pulse Head */}
           {(status === 'firing' || status === 'returning') && (
             <div
               className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white shadow-[0_0_16px_#34d399] -ml-1.5"
@@ -130,70 +148,48 @@ export default function Apollo11LaserLab() {
         </div>
 
         {/* Apollo 11 LRRR on the Moon */}
-        <div className="flex flex-col items-center z-10">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-slate-400 via-slate-200 to-slate-500 border border-slate-300 shadow-lg flex items-center justify-center text-[10px] font-bold text-slate-900 text-center leading-tight">
-            MOON<br/><span className="text-[8px] text-slate-700">LRRR</span>
+        <div className="flex flex-col items-center z-10 shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-slate-400 via-slate-200 to-slate-500 border border-slate-300 shadow-md flex items-center justify-center text-[8px] font-bold text-slate-900 text-center leading-tight">
+            MOON<br/><span className="text-[7px] text-slate-700">LRRR</span>
           </div>
-          <span className="text-[10px] font-mono text-slate-300 mt-1">Tranquility</span>
+          <span className="text-[8px] font-mono text-slate-300 mt-0.5">Tranquility</span>
         </div>
       </div>
 
-      {/* Telemetry Output Grid */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-slate-950/60 border border-cyan-500/20 rounded-lg p-2.5 text-center">
-          <span className="text-[10px] text-slate-400 block font-mono">ROUND-TRIP TIME</span>
-          <span className="text-base font-bold font-mono text-cyan-300">
-            {(elapsedMs / 1000).toFixed(3)} s
+      {/* Telemetry Output Grid (Compact 3-column row) */}
+      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="bg-slate-950/70 border border-cyan-500/20 rounded-lg p-1.5">
+          <span className="text-[9px] text-slate-400 block font-mono">ROUND-TRIP</span>
+          <span className="text-xs font-bold font-mono text-cyan-300">
+            {(elapsedMs / 1000).toFixed(3)}s
           </span>
-          <span className="text-[9px] text-slate-500 block">Nominal: ~2.564s</span>
         </div>
 
-        <div className="bg-slate-950/60 border border-cyan-500/20 rounded-lg p-2.5 text-center">
-          <span className="text-[10px] text-slate-400 block font-mono">CALCULATED DISTANCE</span>
-          <span className="text-base font-bold font-mono text-emerald-300">
+        <div className="bg-slate-950/70 border border-cyan-500/20 rounded-lg p-1.5">
+          <span className="text-[9px] text-slate-400 block font-mono">DISTANCE</span>
+          <span className="text-xs font-bold font-mono text-emerald-300">
             {currentDistanceKm.toLocaleString()} km
           </span>
-          <span className="text-[9px] text-slate-500 block">c = 299,792.458 km/s</span>
         </div>
 
-        <div className="bg-slate-950/60 border border-cyan-500/20 rounded-lg p-2.5 text-center">
-          <span className="text-[10px] text-slate-400 block font-mono">LUNAR RECESSION</span>
-          <span className="text-base font-bold font-mono text-amber-300">
-            +{recessionMm / 10} cm / yr
+        <div className="bg-slate-950/70 border border-cyan-500/20 rounded-lg p-1.5">
+          <span className="text-[9px] text-slate-400 block font-mono">RECESSION</span>
+          <span className="text-xs font-bold font-mono text-amber-300">
+            +{recessionMm / 10} cm/yr
           </span>
-          <span className="text-[9px] text-slate-500 block">Tidal friction proof</span>
         </div>
       </div>
 
       {/* Scientific Confirmation Banner */}
       {status === 'completed' && (
-        <div className="bg-emerald-950/50 border border-emerald-500/40 rounded-lg p-3 text-xs text-emerald-200 flex items-start gap-2 animate-fade-in">
-          <Award className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold block text-emerald-300">Laser Ranging Echo Verified ({photonsReturned} Photons Detected)</span>
-            Laser pulses confirm the Moon recedes at exactly 3.8 cm/year and verify Einstein's General Relativity to 10⁻¹⁴ precision!
+        <div className="bg-emerald-950/60 border border-emerald-500/50 rounded-lg p-2 text-[11px] text-emerald-200 flex items-start gap-1.5 animate-fade-in">
+          <Award className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+          <div className="leading-tight">
+            <span className="font-bold text-emerald-300">Laser Ranging Echo Verified ({photonsReturned} Photons Detected)</span>
+            <span className="block text-[10px] text-slate-300 mt-0.5">Proves the Moon recedes 3.8 cm/yr and verifies General Relativity to 10⁻¹⁴ precision!</span>
           </div>
         </div>
       )}
-
-      {/* Controls */}
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={handleFireLaser}
-          disabled={status === 'firing' || status === 'returning'}
-          className="flex-1 hud-button py-2.5 px-4 rounded-lg font-mono text-xs uppercase tracking-wider font-bold text-white flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-        >
-          <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-          {status === 'firing' ? 'Photon Outbound...' : status === 'returning' ? 'Echo Inbound...' : 'Fire Observatory Laser'}
-        </button>
-        <button
-          onClick={handleReset}
-          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 cursor-pointer transition-colors"
-          title="Reset Simulator"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-      </div>
     </div>
   );
 }

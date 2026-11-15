@@ -1,18 +1,15 @@
 /**
  * Google Gemini AI Service for Team BYTESTAR
- * Resilient multi-model cascade with instant NASA knowledge fallback
- * Tested with latest Gemini API endpoints
+ * NASA Space Apps Challenge: "Abandoned but not Forgotten"
+ * Fast direct REST client with live application context injection
  */
 
 const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-2.0-flash-lite',
-  'gemini-flash-latest',
   'gemini-3.5-flash-lite',
-  'gemini-3.5-flash'
+  'gemini-3.8-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
 ];
 
 class GeminiService {
@@ -21,11 +18,21 @@ class GeminiService {
   }
 
   loadApiKey() {
-    if (typeof window === 'undefined') return '';
-    const stored = localStorage.getItem('echoes_gemini_api_key');
-    if (stored && stored.trim()) return stored.trim();
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
-      return import.meta.env.VITE_GEMINI_API_KEY.trim();
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('echoes_gemini_api_key');
+      if (stored && stored.trim()) return stored.trim();
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const envKey =
+        import.meta.env.VITE_GEMINI_API_KEY ||
+        import.meta.env.GEMINI_API_KEY ||
+        import.meta.env.VITE_OPENAI_API_KEY ||
+        import.meta.env.OPENAI_API_KEY;
+      if (envKey && envKey.trim()) return envKey.trim();
+    }
+    if (typeof process !== 'undefined' && process.env) {
+      const procKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+      if (procKey && procKey.trim()) return procKey.trim();
     }
     return '';
   }
@@ -49,37 +56,91 @@ class GeminiService {
     return Boolean(this.getApiKey());
   }
 
-  buildSystemPrompt(activeArtifact) {
+  /**
+   * Build live system prompt strictly informed by live appContext
+   */
+  buildSystemPrompt(appContext = {}, activeArtifact = null) {
+    const celestialBody = appContext.currentCelestialBody || "Moon (Earth's Natural Satellite, 384,400 km from Earth)";
+    const viewMode = appContext.currentViewMode || "Planet Orbit View";
+    const selectedEquip = appContext.selectedEquipment || (activeArtifact ? activeArtifact.name : "None");
+    const focusedPart = appContext.focusedHardwarePart || "None";
+
+    let artifactSection = '';
     if (activeArtifact) {
-      return `You are ${activeArtifact.name} (${activeArtifact.category}) currently on ${activeArtifact.body} at ${activeArtifact.location}.
-You are speaking as part of the 2026 NASA Space Apps Challenge project 'Echoes Beyond Earth' by Team BYTESTAR.
-Personality: Warm, passionate robotic explorer speaking to school-age students and space lovers.
-Key Facts: NSSDCA ID ${activeArtifact.nssdcaId}, launched in ${activeArtifact.launchYear}.
-Hardware: ${activeArtifact.hardware}.
-Mission legacy: ${activeArtifact.science}.
-Current status & fate: ${activeArtifact.statusBadge}.
-Always reply in 2-3 engaging, conversational sentences that sound natural when spoken aloud.`;
+      artifactSection = `
+CURRENTLY INSPECTED SPACECRAFT DETAILS:
+- Full Name: ${activeArtifact.name} (${activeArtifact.category || 'Surface Explorer'})
+- Celestial Body: ${activeArtifact.body}
+- Archaeological Status: ${activeArtifact.statusType === 'abandoned' ? 'ABANDONED ARTIFACT' : 'FUTURE MONUMENT'}
+- Surface Location: ${activeArtifact.location} (${activeArtifact.coordinates || ''})
+- NSSDCA ID: ${activeArtifact.nssdcaId} | Launch Year: ${activeArtifact.launchYear}
+- Engineering: ${activeArtifact.hardware}
+- Mission Legacy: ${activeArtifact.science}
+- Final Resting Fate: ${activeArtifact.farewell || activeArtifact.story}
+`;
     }
 
-    return `You are a NASA Goddard & JPL Senior Mission Specialist assisting Team BYTESTAR for the 2026 NASA Space Apps Challenge: 'Abandoned but not Forgotten: Storytelling about NASA\'s Discarded Equipment on the Moon and Mars'.
-Personality: Enthusiastic, brilliant, inspiring space explorer.
-Knowledge: Apollo Lunar Modules (Eagle, Challenger), Viking 1 Lander, Opportunity Rover (MER-B), Ingenuity Helicopter, Mars Global Surveyor, MRO, MAVEN, Perseverance.
-Always reply in 2-3 exciting, clear sentences suitable for audio narration.`;
+    return `You are the Official NASA Mission AI Companion for Team BYTESTAR in the 2026 NASA Space Apps Challenge:
+"Abandoned but not Forgotten: Storytelling about NASA's Discarded Equipment on the Moon and Mars".
+
+=======================================================
+CRITICAL LIVE APPLICATION CONTEXT (READ THIS FIRST!):
+- Current Celestial Body: ${celestialBody}
+- Current View Mode: ${viewMode}
+- Selected Spacecraft: ${selectedEquip}
+- Focused Hardware Subsystem: ${focusedPart}
+=======================================================
+
+MANDATORY RULES:
+1. LIVE PLANET AWARENESS: Always check 'Current Celestial Body' and 'Selected Spacecraft' first!
+   - If Current Celestial Body says Moon, the user is looking at the MOON (Earth's Natural Satellite, 384,400 km away). NEVER say Mars when the Moon is open!
+   - If Current Celestial Body says Mars, the user is looking at MARS (The Red Planet, ~225,000,000 km away).
+   - If the user asks "What's this planet called that I'm opening right now?" or "What am I looking at?", identify the exact celestial body (${celestialBody}) and any selected spacecraft immediately.
+2. TONE & PERSONALITY: Inspiring, knowledgeable, warm NASA communicator speaking to students and space enthusiasts.
+3. LENGTH: Keep responses to 2-3 engaging, clear sentences that sound wonderful when read aloud.
+${artifactSection}`;
   }
 
-  getOfflineAnswer(userQuery, activeArtifact) {
+  getOfflineAnswer(userQuery, appContext = {}, activeArtifact = null) {
     const q = (userQuery || '').toLowerCase();
+    const isMoon = (appContext.currentCelestialBody || '').toLowerCase().includes('moon') || activeArtifact?.body === 'Moon';
 
-    // Check specific equipment
+    // Direct questions about the currently open planet
+    if (
+      q.includes('what planet') ||
+      q.includes('what is this planet') ||
+      q.includes("what's this planet") ||
+      q.includes('which planet') ||
+      q.includes('where am i') ||
+      q.includes('opening right now')
+    ) {
+      if (isMoon) {
+        return "You are currently exploring the Moon (Earth's Natural Satellite, 384,400 km from Earth)! Six Apollo Lunar Module descent stages and historic scientific stations remain resting here in the lunar dust.";
+      }
+      return "You are currently exploring Mars (The Red Planet, ~225,000,000 km from Earth)! Mars is the final resting home to legendary rovers, landers, and orbiters like Viking 1, Opportunity, and Ingenuity.";
+    }
+
+    // Direct questions about what is being looked at
+    if (q.includes('what am i looking at') || q.includes('what is this') || q.includes('what spacecraft')) {
+      if (activeArtifact) {
+        return `You are currently inspecting ${activeArtifact.name} (${activeArtifact.statusType === 'abandoned' ? 'ABANDONED ARTIFACT' : 'FUTURE MONUMENT'}) at ${activeArtifact.location} on ${activeArtifact.body}!`;
+      }
+      if (isMoon) {
+        return "You are in Lunar Orbit View looking at the Moon, 384,400 km from Earth. Click any glowing surface beacon or mission roster item to inspect historic Apollo lunar hardware in 3D.";
+      }
+      return "You are in Mars Orbit View looking at the Red Planet, ~225,000,000 km from Earth. Select any rover, lander, or orbiter to inspect its 3D hardware and hear its story.";
+    }
+
+    // Specific spacecraft queries
     if (activeArtifact) {
       if (q.includes('abandon') || q.includes('leave') || q.includes('fate') || q.includes('why')) {
-        return activeArtifact.fateScript || activeArtifact.farewell || `${activeArtifact.shortName} fulfilled its mission objectives and now rests permanently as a historic monument on ${activeArtifact.body}.`;
+        return activeArtifact.fateScript || activeArtifact.farewell || `${activeArtifact.shortName} completed its mission and now rests as an eternal monument at ${activeArtifact.location} on ${activeArtifact.body}.`;
       }
       if (q.includes('hardware') || q.includes('instrument') || q.includes('power') || q.includes('wheel') || q.includes('engine')) {
-        return activeArtifact.engineeringScript || `${activeArtifact.shortName} carried specialized NASA instruments that endured the extreme space environment to gather unprecedented scientific data.`;
+        return activeArtifact.engineeringScript || activeArtifact.hardware || `${activeArtifact.shortName} was engineered with resilient aerospace instruments designed to endure the extreme environment of ${activeArtifact.body}.`;
       }
       if (q.includes('legacy') || q.includes('pave') || q.includes('inspire') || q.includes('future')) {
-        return activeArtifact.legacyScript || `${activeArtifact.shortName} proved critical technologies that directly paved the way for modern missions and future human exploration.`;
+        return activeArtifact.legacyScript || activeArtifact.science || `${activeArtifact.shortName} proved groundbreaking technologies that directly pave the way for human missions back to the Moon and Mars!`;
       }
       if (q.includes('story') || q.includes('history') || q.includes('land') || q.includes('fly')) {
         return activeArtifact.narrationScript || activeArtifact.story;
@@ -91,34 +152,37 @@ Always reply in 2-3 exciting, clear sentences suitable for audio narration.`;
         });
         if (found) return found.a;
       }
-      return `${activeArtifact.name} here at ${activeArtifact.location}. My hardware recorded milestones that rewritten planetary science, paving the way for humanity's next giant leap.`;
+      return `${activeArtifact.name} is resting at ${activeArtifact.location}. Its scientific discoveries reshaped our understanding of ${activeArtifact.body}.`;
     }
 
     // General queries
     if (q.includes('moon') || q.includes('apollo') || q.includes('eagle')) {
-      return "On the Moon, six Apollo Lunar Module Descent Stages remain at their landing sites. Because the Moon has no wind or weather, their golden foil legs and the astronauts' bootprints will stand undisturbed for millions of years!";
+      return "On the Moon, six Apollo Lunar Module Descent Stages remain at their landing sites. Because the Moon has no wind or weather, their golden foil legs and astronauts' bootprints will stand undisturbed for millions of years!";
     }
     if (q.includes('mars') || q.includes('perseverance') || q.includes('opportunity') || q.includes('viking')) {
       return "Mars is home to our legendary robotic pioneers. Viking 1 was our first long-term resident in 1976, Opportunity drove an extraterrestrial marathon for 15 years, and Ingenuity proved humanity can fly in thin alien skies!";
     }
     if (q.includes('bytestar')) {
-      return "Team BYTESTAR engineered this interactive 3D laboratory for the 2026 NASA Space Apps Challenge, bringing silent monuments on the Moon and Mars back to life with authentic storytelling!";
+      return "Team BYTESTAR created this interactive 3D laboratory for the 2026 NASA Space Apps Challenge, honoring humanity's discarded equipment on the Moon and Mars as archaeological treasures!";
     }
 
-    return "Welcome to the Planetary Archaeology Lab! Click on any spacecraft on the Moon or Mars to inspect its 3D hardware, drive it across the surface, and hear its story narrated aloud.";
+    return "Welcome to the Planetary Archaeology Lab! Select any spacecraft on the Moon or Mars to inspect its 3D hardware and hear its story.";
   }
 
-  async generateResponse({ prompt, activeArtifact }) {
+  /**
+   * Fast multi-model cascade starting with gemini-3.5-flash-lite
+   */
+  async generateResponse({ prompt, appContext = {}, activeArtifact = null }) {
     const key = this.getApiKey();
 
     if (!key) {
       return {
-        text: this.getOfflineAnswer(prompt, activeArtifact),
+        text: this.getOfflineAnswer(prompt, appContext, activeArtifact),
         isFallback: true
       };
     }
 
-    const systemPrompt = this.buildSystemPrompt(activeArtifact);
+    const systemPrompt = this.buildSystemPrompt(appContext, activeArtifact);
 
     for (const model of CANDIDATE_MODELS) {
       try {
@@ -131,7 +195,7 @@ Always reply in 2-3 exciting, clear sentences suitable for audio narration.`;
             }
           ],
           generationConfig: {
-            temperature: 0.7,
+            temperature: 0.6,
             maxOutputTokens: 250
           }
         };
@@ -143,7 +207,7 @@ Always reply in 2-3 exciting, clear sentences suitable for audio narration.`;
         });
 
         if (!res.ok) {
-          console.warn(`Model ${model} returned ${res.status}`);
+          console.warn(`Gemini model ${model} HTTP ${res.status}`);
           continue;
         }
 
@@ -157,8 +221,9 @@ Always reply in 2-3 exciting, clear sentences suitable for audio narration.`;
       }
     }
 
+    // Graceful fallback to instant verified knowledge
     return {
-      text: this.getOfflineAnswer(prompt, activeArtifact),
+      text: this.getOfflineAnswer(prompt, appContext, activeArtifact),
       isFallback: true
     };
   }

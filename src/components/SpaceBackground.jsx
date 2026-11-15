@@ -19,7 +19,6 @@ export default function SpaceBackground() {
     const height = window.innerHeight;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x02040a, 0.0001);
 
     const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 4000);
     camera.position.z = 1;
@@ -31,11 +30,12 @@ export default function SpaceBackground() {
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x040711, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25; // Crisp contrast & starlight depth
+    renderer.toneMappingExposure = 1.35; // Luminous starlight & vivid Milky Way
 
-    // 1. High-Resolution Inverted 360° Milky Way Skybox Sphere
+    // 1. High-Definition Milky Way Skybox Sphere
     const textureLoader = new THREE.TextureLoader();
     const milkyWayTexture = textureLoader.load(
       '/textures/2k_stars_milky_way.jpg',
@@ -57,45 +57,48 @@ export default function SpaceBackground() {
       side: THREE.BackSide,
       depthWrite: false,
       transparent: true,
-      opacity: 0.98
+      opacity: 1.0
     });
     const skySphere = new THREE.Mesh(skyGeo, skyMat);
+    skySphere.rotation.x = 0.2; // Angle galactic core across viewport
     scene.add(skySphere);
 
-    // 2. Dual-Layer Multi-Magnitude Twinkling Star Particle Field
-    const starCount = 4800;
-    const starGeo = new THREE.BufferGeometry();
-    const positions = new Float32Array(starCount * 3);
-    const colors = new Float32Array(starCount * 3);
+    // 2. Dual-Tier Multi-Magnitude Star Field
     const starColorList = [
-      new THREE.Color(0xa5c9eb), // O/B Blue-White
-      new THREE.Color(0xf8f9fa), // A/F Pure White
-      new THREE.Color(0xfff4e8), // G Solar White-Yellow
-      new THREE.Color(0xffddb4), // K Orange
-      new THREE.Color(0xffb896)  // M Red-Orange
+      new THREE.Color(0xb5d8ff), // O/B Brilliant Blue-White
+      new THREE.Color(0xffffff), // A/F Pure Diamond White
+      new THREE.Color(0xfff6ea), // G Solar White-Yellow
+      new THREE.Color(0xffdeb8), // K Warm Orange
+      new THREE.Color(0xffbaa0)  // M Radiant Red-Orange
     ];
 
-    for (let i = 0; i < starCount; i++) {
-      const radius = 500 + Math.random() * 1400;
+    // Tier A: Dense Background Stellar Dust (6,500 stars)
+    const starCountA = 6500;
+    const starGeoA = new THREE.BufferGeometry();
+    const positionsA = new Float32Array(starCountA * 3);
+    const colorsA = new Float32Array(starCountA * 3);
+
+    for (let i = 0; i < starCountA; i++) {
+      const radius = 600 + Math.random() * 1500;
       const theta = 2 * Math.PI * Math.random();
       const phi = Math.acos(2 * Math.random() - 1);
 
-      positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = radius * Math.cos(phi);
+      positionsA[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positionsA[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positionsA[i * 3 + 2] = radius * Math.cos(phi);
 
       const color = starColorList[Math.floor(Math.random() * starColorList.length)];
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
+      colorsA[i * 3] = color.r;
+      colorsA[i * 3 + 1] = color.g;
+      colorsA[i * 3 + 2] = color.b;
     }
 
-    starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    starGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    starGeoA.setAttribute('position', new THREE.BufferAttribute(positionsA, 3));
+    starGeoA.setAttribute('color', new THREE.BufferAttribute(colorsA, 3));
 
     const starTexture = createStarCanvasTexture();
-    const starMat = new THREE.PointsMaterial({
-      size: 2.6,
+    const starMatA = new THREE.PointsMaterial({
+      size: 2.8,
       vertexColors: true,
       map: starTexture,
       transparent: true,
@@ -104,8 +107,46 @@ export default function SpaceBackground() {
       depthWrite: false
     });
 
-    const starField = new THREE.Points(starGeo, starMat);
-    scene.add(starField);
+    const starFieldA = new THREE.Points(starGeoA, starMatA);
+    scene.add(starFieldA);
+
+    // Tier B: Prominent Bright Constellation Stars with Optical Diffraction Halos (450 stars)
+    const starCountB = 450;
+    const starGeoB = new THREE.BufferGeometry();
+    const positionsB = new Float32Array(starCountB * 3);
+    const colorsB = new Float32Array(starCountB * 3);
+
+    for (let i = 0; i < starCountB; i++) {
+      const radius = 550 + Math.random() * 1200;
+      const theta = 2 * Math.PI * Math.random();
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      positionsB[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+      positionsB[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+      positionsB[i * 3 + 2] = radius * Math.cos(phi);
+
+      const color = starColorList[Math.floor(Math.random() * 3)]; // Bias toward brilliant blue-white
+      colorsB[i * 3] = color.r * 1.3;
+      colorsB[i * 3 + 1] = color.g * 1.3;
+      colorsB[i * 3 + 2] = color.b * 1.3;
+    }
+
+    starGeoB.setAttribute('position', new THREE.BufferAttribute(positionsB, 3));
+    starGeoB.setAttribute('color', new THREE.BufferAttribute(colorsB, 3));
+
+    const brightStarTexture = createBrightStarTexture();
+    const starMatB = new THREE.PointsMaterial({
+      size: 5.5,
+      vertexColors: true,
+      map: brightStarTexture,
+      transparent: true,
+      opacity: 1.0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    const starFieldB = new THREE.Points(starGeoB, starMatB);
+    scene.add(starFieldB);
 
     // 3. Frequent Mineral-Colored Shooting Meteors (Pool of 8)
     const meteorPoolSize = 8;
@@ -113,7 +154,6 @@ export default function SpaceBackground() {
 
     for (let i = 0; i < meteorPoolSize; i++) {
       const geo = new THREE.BufferGeometry();
-      // 4 points for tapered trail: [head, mid1, mid2, tail]
       const pos = new Float32Array(12);
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
 
@@ -132,7 +172,7 @@ export default function SpaceBackground() {
       const headGeo = new THREE.BufferGeometry();
       headGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
       const headMat = new THREE.PointsMaterial({
-        size: 8,
+        size: 9,
         map: starTexture,
         color: 0xffffff,
         transparent: true,
@@ -157,7 +197,6 @@ export default function SpaceBackground() {
       });
     }
 
-    // Frequent shooting meteors: every 1.5 to 3.5 seconds
     let nextMeteorTime = performance.now() + 800;
 
     let reqId;
@@ -166,8 +205,9 @@ export default function SpaceBackground() {
       const now = performance.now();
 
       // Slow majestic celestial drift
-      starField.rotation.y += 0.00012;
-      skySphere.rotation.y += 0.00006;
+      starFieldA.rotation.y += 0.00012;
+      starFieldB.rotation.y += 0.00012;
+      skySphere.rotation.y += 0.00008;
 
       // Spawn meteors every 1.5–3.5s
       if (now > nextMeteorTime) {
@@ -253,8 +293,10 @@ export default function SpaceBackground() {
       cancelAnimationFrame(reqId);
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
-      starGeo.dispose();
-      starMat.dispose();
+      starGeoA.dispose();
+      starMatA.dispose();
+      starGeoB.dispose();
+      starMatB.dispose();
       skyGeo.dispose();
       skyMat.dispose();
     };
@@ -276,12 +318,42 @@ function createStarCanvasTexture() {
 
   const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
   gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.2, 'rgba(240,250,255,0.9)');
-  gradient.addColorStop(0.5, 'rgba(120,180,255,0.3)');
+  gradient.addColorStop(0.2, 'rgba(240,250,255,0.95)');
+  gradient.addColorStop(0.5, 'rgba(140,190,255,0.4)');
   gradient.addColorStop(1, 'rgba(0,0,0,0)');
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 32, 32);
+
+  return new THREE.CanvasTexture(canvas);
+}
+
+function createBrightStarTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+
+  // Luminous radial glow
+  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.15, 'rgba(255,255,255,0.95)');
+  gradient.addColorStop(0.35, 'rgba(180,225,255,0.65)');
+  gradient.addColorStop(0.65, 'rgba(100,170,255,0.25)');
+  gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 64, 64);
+
+  // 4-Point Optical Diffraction Spikes (Telescopic starlight flare)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(32, 6);
+  ctx.lineTo(32, 58);
+  ctx.moveTo(6, 32);
+  ctx.lineTo(58, 32);
+  ctx.stroke();
 
   return new THREE.CanvasTexture(canvas);
 }

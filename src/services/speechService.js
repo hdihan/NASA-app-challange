@@ -1,14 +1,23 @@
 /**
  * Centralized Single-Voice Audio Manager & Speech Controller for Team BYTESTAR
- * Supports ElevenLabs Streaming TTS with high-quality Web Speech API fallback
- * Guaranteed ZERO voice overlap: immediately stops, resets, and destroys any active audio
+ * NASA Space Apps Challenge 2026: "Abandoned but not Forgotten"
+ * 
+ * High-definition ElevenLabs Human Voice Engine with expressive speech settings
+ * Supports eleven_v3 with cascading fallbacks to eleven_multilingual_v2 and eleven_turbo_v2_5
+ * Natural Kid-Friendly Storytelling with zero voice overlap
  */
 
-// Premade fallback voice mapping (works across both Free and Paid ElevenLabs accounts)
+// Voice fallbacks per gender for standard accounts
 const PREMADE_VOICE_FALLBACKS = {
-  male: 'TxGEqnHWrfWFTfGW9XjX',    // Josh - friendly male
-  female: '21m00Tcm4TlvDq8ikWAM'  // Rachel - warm female
+  male: 'TxGEqnHWrfWFTfGW9XjX',    // Josh - friendly warm male
+  female: '21m00Tcm4TlvDq8ikWAM'  // Rachel - warm expressive female
 };
+
+const ELEVEN_MODELS = [
+  'eleven_v3',
+  'eleven_multilingual_v2',
+  'eleven_turbo_v2_5'
+];
 
 class SpeechService {
   constructor() {
@@ -22,10 +31,10 @@ class SpeechService {
     this.onStateChangeCallbacks = [];
     this.currentUtterance = null;
     this.cachedVoices = [];
-    
+
     // ElevenLabs state & audio player
     this.currentAudio = null;
-    this.audioCache = new Map(); // text+voiceId -> blobUrl for instant repeat play
+    this.audioCache = new Map(); // cacheKey -> blobUrl for instant replay
     this.elevenLabsKey = this.loadElevenLabsKey();
 
     if (typeof window !== 'undefined' && this.synth) {
@@ -41,11 +50,19 @@ class SpeechService {
   }
 
   loadElevenLabsKey() {
-    if (typeof window === 'undefined') return '';
-    const stored = localStorage.getItem('echoes_elevenlabs_api_key');
-    if (stored && stored.trim()) return stored.trim();
-    if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ELEVENLABS_API_KEY) {
-      return import.meta.env.VITE_ELEVENLABS_API_KEY.trim();
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('echoes_elevenlabs_api_key');
+      if (stored && stored.trim()) return stored.trim();
+    }
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      const envKey =
+        import.meta.env.VITE_ELEVENLABS_API_KEY ||
+        import.meta.env.ELEVENLABS_API_KEY;
+      if (envKey && envKey.trim()) return envKey.trim();
+    }
+    if (typeof process !== 'undefined' && process.env) {
+      const procKey = process.env.VITE_ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY;
+      if (procKey && procKey.trim()) return procKey.trim();
     }
     return '';
   }
@@ -60,6 +77,7 @@ class SpeechService {
         localStorage.removeItem('echoes_elevenlabs_api_key');
       }
     }
+    this.notify();
   }
 
   getElevenLabsApiKey() {
@@ -116,7 +134,6 @@ class SpeechService {
    * Strictly guarantees ZERO audio overlap
    */
   stop() {
-    // 1. Stop any playing HTMLAudioElement
     if (this.currentAudio) {
       try {
         this.currentAudio.pause();
@@ -128,7 +145,6 @@ class SpeechService {
       this.currentAudio = null;
     }
 
-    // 2. Cancel browser speechSynthesis
     if (this.synth) {
       try {
         this.synth.cancel();
@@ -143,11 +159,11 @@ class SpeechService {
   }
 
   /**
-   * Stream / play audio using ElevenLabs API
+   * Stream / play audio using ElevenLabs REST API with expressive settings
    */
   async speakWithElevenLabs(text, voiceProfile = {}, onEnd = null) {
     const apiKey = this.getElevenLabsApiKey();
-    const voiceId = voiceProfile?.elevenLabsVoiceId || PREMADE_VOICE_FALLBACKS[voiceProfile?.gender || 'male'];
+    const voiceId = voiceProfile?.elevenLabsVoiceId || PREMADE_VOICE_FALLBACKS[voiceProfile?.gender || 'female'];
     const cacheKey = `${voiceId}_${text.trim()}`;
 
     // Clean text for speech
@@ -156,54 +172,63 @@ class SpeechService {
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Check in-memory audio blob cache
+    // Check in-memory audio blob cache for instant replay
     if (this.audioCache.has(cacheKey)) {
       const cachedUrl = this.audioCache.get(cacheKey);
       this.playAudioUrl(cachedUrl, onEnd);
       return;
     }
 
-    try {
-      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
-        method: 'POST',
-        headers: {
-          'xi-api-key': apiKey,
-          'Content-Type': 'application/json',
-          'Accept': 'audio/mpeg'
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          model_id: 'eleven_turbo_v2_5',
-          voice_settings: {
-            stability: 0.55,
-            similarity_boost: 0.85
+    // Try eleven_v3 first, then fallback models
+    for (const modelId of ELEVEN_MODELS) {
+      try {
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'audio/mpeg'
+          },
+          body: JSON.stringify({
+            text: cleanText,
+            model_id: modelId,
+            voice_settings: {
+              stability: 0.30,
+              similarity_boost: 0.82,
+              style: 0.72,
+              use_speaker_boost: true
+            }
+          })
+        });
+
+        if (response.status === 402 || response.status === 400) {
+          const errJson = await response.json().catch(() => ({}));
+          // If custom voice requires paid plan, try premade fallback voice
+          if (errJson?.detail?.code === 'paid_plan_required' || errJson?.detail?.type === 'payment_required') {
+            const fallbackVoiceId = PREMADE_VOICE_FALLBACKS[voiceProfile?.gender || 'female'];
+            return this.speakWithElevenLabsFallback(cleanText, fallbackVoiceId, onEnd);
           }
-        })
-      });
-
-      // If library voice requires paid plan, retry with guaranteed premade voice
-      if (response.status === 402 || response.status === 400) {
-        const errJson = await response.json().catch(() => ({}));
-        if (errJson?.detail?.code === 'paid_plan_required' || errJson?.detail?.type === 'payment_required') {
-          console.warn(`ElevenLabs voice ${voiceId} requires paid plan, retrying with premade voice...`);
-          const fallbackVoiceId = PREMADE_VOICE_FALLBACKS[voiceProfile?.gender || 'male'];
-          return this.speakWithElevenLabsFallback(cleanText, fallbackVoiceId, onEnd);
+          // Continue to next model if model_id not supported
+          continue;
         }
-        throw new Error(`ElevenLabs error: ${response.status}`);
-      }
 
-      if (!response.ok) {
-        throw new Error(`ElevenLabs HTTP ${response.status}`);
-      }
+        if (!response.ok) {
+          console.warn(`ElevenLabs HTTP ${response.status} with model ${modelId}`);
+          continue;
+        }
 
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      this.audioCache.set(cacheKey, blobUrl);
-      this.playAudioUrl(blobUrl, onEnd);
-    } catch (err) {
-      console.warn('ElevenLabs speech failed, gracefully falling back to browser voice:', err);
-      this.speakBrowser(text, voiceProfile, onEnd);
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        this.audioCache.set(cacheKey, blobUrl);
+        this.playAudioUrl(blobUrl, onEnd);
+        return;
+      } catch (err) {
+        console.warn(`ElevenLabs error with ${modelId}:`, err);
+      }
     }
+
+    // If all ElevenLabs attempts fail, gracefully fallback to browser voice
+    this.speakBrowser(text, voiceProfile, onEnd);
   }
 
   async speakWithElevenLabsFallback(cleanText, fallbackVoiceId, onEnd) {
@@ -218,7 +243,11 @@ class SpeechService {
         },
         body: JSON.stringify({
           text: cleanText,
-          model_id: 'eleven_turbo_v2_5'
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: 0.35,
+            similarity_boost: 0.80
+          }
         })
       });
       if (!res.ok) throw new Error('Fallback failed');
@@ -231,7 +260,7 @@ class SpeechService {
   }
 
   playAudioUrl(audioUrl, onEnd) {
-    this.stop(); // zero overlap check
+    this.stop(); // Zero overlap guarantee
     const audio = new Audio(audioUrl);
     this.currentAudio = audio;
     this.isSpeaking = true;
@@ -261,94 +290,81 @@ class SpeechService {
     });
   }
 
-  /**
-   * Browser SpeechSynthesis Fallback
-   */
-  speakBrowser(text, voiceProfile = { pitch: 1.0, rate: 0.98 }, onEnd = null) {
-    if (!this.synth) {
-      if (onEnd) onEnd();
-      return;
-    }
-
+  speakBrowser(text, voiceProfile = {}, onEnd = null) {
+    if (!this.synth || this.isMuted) return;
     this.stop();
 
-    try {
-      const cleanText = text
-        .replace(/[*#_`~]/g, '')
-        .replace(/CO₂/g, 'carbon dioxide')
-        .replace(/O₂/g, 'oxygen');
+    const cleanText = text
+      .replace(/\[chuckles\]/gi, '')
+      .replace(/[*#_`~]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.pitch = voiceProfile?.pitch ?? 1.0;
-      utterance.rate = voiceProfile?.rate ?? 0.96;
-      utterance.lang = 'en-US';
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = voiceProfile?.rate || 1.0;
+    utterance.pitch = voiceProfile?.pitch || 1.05;
 
-      const voices = this.cachedVoices.length > 0 ? this.cachedVoices : this.synth.getVoices();
-      if (voices && voices.length > 0) {
-        const enVoices = voices.filter((v) => v.lang.startsWith('en'));
-        const isFemale = voiceProfile?.gender === 'female';
-        
-        let matchVoice = enVoices.find((v) => {
-          const name = v.name.toLowerCase();
-          if (isFemale) {
-            return name.includes('natural') || name.includes('aria') || name.includes('jenny') || name.includes('samantha') || name.includes('zira') || name.includes('karen');
-          }
-          return name.includes('natural') || name.includes('guy') || name.includes('daniel') || name.includes('david') || name.includes('george') || name.includes('adam');
-        });
+    const voices = this.cachedVoices.length > 0 ? this.cachedVoices : this.synth.getVoices();
+    const isFemale = voiceProfile?.gender === 'female';
 
-        if (!matchVoice) matchVoice = enVoices[0];
-        if (matchVoice) utterance.voice = matchVoice;
+    const preferredVoice = voices.find((v) => {
+      const name = v.name.toLowerCase();
+      if (isFemale) {
+        return (
+          (name.includes('female') ||
+            name.includes('zira') ||
+            name.includes('samantha') ||
+            name.includes('victoria') ||
+            name.includes('karen') ||
+            name.includes('google us english') ||
+            name.includes('natural')) &&
+          v.lang.startsWith('en')
+        );
       }
+      return (
+        (name.includes('david') ||
+          name.includes('george') ||
+          name.includes('male') ||
+          name.includes('guy')) &&
+        v.lang.startsWith('en')
+      );
+    });
 
-      this.currentUtterance = utterance;
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => {
       this.isSpeaking = true;
       this.notify();
+    };
 
-      utterance.onend = () => {
-        this.isSpeaking = false;
-        this.currentUtterance = null;
-        this.notify();
-        if (onEnd) onEnd();
-      };
-
-      utterance.onerror = (e) => {
-        if (e.error !== 'canceled' && e.error !== 'interrupted') {
-          console.warn('SpeechSynthesis error:', e);
-        }
-        this.isSpeaking = false;
-        this.currentUtterance = null;
-        this.notify();
-        if (onEnd) onEnd();
-      };
-
-      setTimeout(() => {
-        if (this.synth && this.currentUtterance === utterance) {
-          this.synth.speak(utterance);
-        }
-      }, 20);
-    } catch (err) {
-      console.warn('SpeechSynthesis error:', err);
+    utterance.onend = () => {
       this.isSpeaking = false;
+      this.currentUtterance = null;
       this.notify();
       if (onEnd) onEnd();
-    }
+    };
+
+    utterance.onerror = (e) => {
+      console.warn('Speech synthesis error:', e);
+      this.isSpeaking = false;
+      this.currentUtterance = null;
+      this.notify();
+      if (onEnd) onEnd();
+    };
+
+    this.currentUtterance = utterance;
+    this.synth.speak(utterance);
   }
 
-  /**
-   * Main Speak Method: Uses ElevenLabs if API key present, else high quality browser voice
-   */
   speak(text, voiceProfile = {}, onEnd = null) {
-    // Strictly cancel and destroy any existing audio first to guarantee zero overlap
-    this.stop();
-
-    if (!text || this.isMuted) {
-      if (onEnd) onEnd();
-      return;
-    }
+    if (this.isMuted || !text) return;
 
     this.lastSpokenText = text;
     this.lastVoiceProfile = voiceProfile;
 
+    // Use ElevenLabs if API key is present
     if (this.hasElevenLabsKey()) {
       this.speakWithElevenLabs(text, voiceProfile, onEnd);
     } else {
@@ -356,24 +372,8 @@ class SpeechService {
     }
   }
 
-  replay() {
-    if (this.lastSpokenText) {
-      this.speak(this.lastSpokenText, this.lastVoiceProfile);
-    }
-  }
-
   startListening(onResult, onError) {
-    if (!this.recognition) {
-      if (onError) onError('Speech recognition not supported in this browser.');
-      return;
-    }
-
-    if (this.isListening) {
-      try {
-        this.recognition.stop();
-      } catch {}
-    }
-
+    if (!this.recognition) return;
     this.stop();
 
     this.recognition.onstart = () => {
@@ -382,11 +382,9 @@ class SpeechService {
     };
 
     this.recognition.onresult = (event) => {
-      this.isListening = false;
-      this.notify();
-      if (event.results && event.results[0] && event.results[0][0]) {
-        const transcript = event.results[0][0].transcript;
-        if (onResult) onResult(transcript);
+      const transcript = event.results?.[0]?.[0]?.transcript;
+      if (transcript && onResult) {
+        onResult(transcript);
       }
     };
 
@@ -404,9 +402,7 @@ class SpeechService {
     try {
       this.recognition.start();
     } catch (e) {
-      this.isListening = false;
-      this.notify();
-      if (onError) onError(e.message);
+      console.warn('Recognition start error:', e);
     }
   }
 
@@ -414,7 +410,9 @@ class SpeechService {
     if (this.recognition && this.isListening) {
       try {
         this.recognition.stop();
-      } catch {}
+      } catch (e) {
+        console.warn('Recognition stop error:', e);
+      }
     }
     this.isListening = false;
     this.notify();
