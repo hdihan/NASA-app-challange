@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,8 +36,13 @@ export default function MissionRoster({
   artifactFilter = 'abandoned'
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [filterGroup, setFilterGroup] = useState('all'); // 'all' | 'surface' | 'orbiter'
+  const [marsFilterGroup, setMarsFilterGroup] = useState('all'); // 'all' | 'surface' | 'orbiter'
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Clear search query on planet switch so searches don't bleed across planets
+  useEffect(() => {
+    setSearchQuery('');
+  }, [activePlanetId]);
 
   // Planet-specific artifacts
   const planetArtifacts = useMemo(() => {
@@ -45,12 +50,17 @@ export default function MissionRoster({
   }, [activePlanetId]);
 
   // Filtered list respecting both the global artifactFilter and local group filter
+  // Moon and Mars work completely separately so Mars orbit/surface sections never interfere with Moon
   const filteredArtifacts = useMemo(() => {
     return planetArtifacts.filter((item) => {
       const matchesStatus =
         artifactFilter === 'all' ? true : item.statusType === 'abandoned';
       const matchesGroup =
-        filterGroup === 'all' ? true : item.group === filterGroup;
+        activePlanetId === 'mars'
+          ? marsFilterGroup === 'all'
+            ? true
+            : item.group === marsFilterGroup
+          : true;
       const matchesSearch =
         searchQuery.trim() === ''
           ? true
@@ -59,7 +69,7 @@ export default function MissionRoster({
             item.location.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesStatus && matchesGroup && matchesSearch;
     });
-  }, [planetArtifacts, filterGroup, searchQuery, artifactFilter]);
+  }, [planetArtifacts, activePlanetId, marsFilterGroup, searchQuery, artifactFilter]);
 
   return (
     <div
@@ -111,9 +121,9 @@ export default function MissionRoster({
           {activePlanetId === 'mars' && (
             <div className="grid grid-cols-3 gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800 text-xs font-display">
               <button
-                onClick={() => setFilterGroup('all')}
+                onClick={() => setMarsFilterGroup('all')}
                 className={`py-1.5 rounded-xl text-center transition-colors cursor-pointer ${
-                  filterGroup === 'all'
+                  marsFilterGroup === 'all'
                     ? 'bg-cyan-500 text-slate-950 font-bold'
                     : 'text-slate-400 hover:text-white'
                 }`}
@@ -121,9 +131,9 @@ export default function MissionRoster({
                 All
               </button>
               <button
-                onClick={() => setFilterGroup('surface')}
+                onClick={() => setMarsFilterGroup('surface')}
                 className={`py-1.5 rounded-xl text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
-                  filterGroup === 'surface'
+                  marsFilterGroup === 'surface'
                     ? 'bg-orange-500 text-slate-950 font-bold'
                     : 'text-slate-400 hover:text-white'
                 }`}
@@ -131,9 +141,9 @@ export default function MissionRoster({
                 <Bot className="w-3.5 h-3.5" /> Surface
               </button>
               <button
-                onClick={() => setFilterGroup('orbiter')}
+                onClick={() => setMarsFilterGroup('orbiter')}
                 className={`py-1.5 rounded-xl text-center transition-colors cursor-pointer flex items-center justify-center gap-1 ${
-                  filterGroup === 'orbiter'
+                  marsFilterGroup === 'orbiter'
                     ? 'bg-purple-500 text-white font-bold'
                     : 'text-slate-400 hover:text-white'
                 }`}

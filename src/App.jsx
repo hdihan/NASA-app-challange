@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import SpaceBackground from './components/SpaceBackground';
+import MeteorOverlay from './components/MeteorOverlay';
 import PlanetViewer from './components/PlanetViewer';
 import NavigationBar from './components/NavigationBar';
 import MissionRoster from './components/MissionRoster';
@@ -87,6 +88,7 @@ export default function App() {
   const handleCloseDrawer = () => {
     speechService.stop();
     setIsDrawerOpen(false);
+    setSelectedArtifact(null);
   };
 
   const abandonedCount = ARTIFACTS.filter((a) => a.statusType === 'abandoned').length;
@@ -97,7 +99,10 @@ export default function App() {
       {/* 1. Deep Space Starfield & Realistic Shooting Meteor Canvas */}
       <SpaceBackground />
 
-      {/* 2. Interactive 3D Planet Globe (react-globe.gl) */}
+      {/* 2. Meteor Shower Overlay — rendered above the globe canvas, below UI */}
+      <MeteorOverlay />
+
+      {/* 3. Interactive 3D Planet Globe (react-globe.gl) */}
       <PlanetViewer
         activePlanetId={activePlanetId}
         selectedArtifact={selectedArtifact}
@@ -145,7 +150,10 @@ export default function App() {
         <FarewellModal
           artifact={farewellArtifact}
           isOpen={Boolean(farewellArtifact)}
-          onClose={() => setFarewellArtifact(null)}
+          onClose={() => {
+            setFarewellArtifact(null);
+            setSelectedArtifact(null);
+          }}
         />
       )}
 

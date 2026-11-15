@@ -87,30 +87,43 @@ export default function PlanetViewer({
     );
   }, [activePlanetId]);
 
-  // Animate camera fly-to when an artifact is selected
+  // Animate camera fly-to when an artifact is selected, and return to proper view on going back
+  const prevArtifactRef = useRef(null);
+
   useEffect(() => {
-    if (!globeRef.current || !selectedArtifact) return;
+    if (!globeRef.current) return;
 
-    if (selectedArtifact.planetId === activePlanetId) {
-      soundEffects.playFlyWhoosh();
+    if (selectedArtifact) {
+      if (selectedArtifact.planetId === activePlanetId) {
+        soundEffects.playFlyWhoosh();
 
-      if (selectedArtifact.group === 'orbiter') {
-        globeRef.current.pointOfView(
-          { lat: selectedArtifact.lat || 10, lng: selectedArtifact.lng || 20, altitude: 1.45 },
-          1600
-        );
-      } else {
-        globeRef.current.pointOfView(
-          { lat: selectedArtifact.lat, lng: selectedArtifact.lng, altitude: 0.55 },
-          1800
-        );
+        if (selectedArtifact.group === 'orbiter') {
+          globeRef.current.pointOfView(
+            { lat: selectedArtifact.lat || 10, lng: selectedArtifact.lng || 20, altitude: 1.45 },
+            1600
+          );
+        } else {
+          globeRef.current.pointOfView(
+            { lat: selectedArtifact.lat, lng: selectedArtifact.lng, altitude: 0.55 },
+            1800
+          );
+        }
+
+        prevArtifactRef.current = selectedArtifact;
+
+        const chimeTimer = setTimeout(() => {
+          soundEffects.playLockChime();
+        }, 1400);
+
+        return () => clearTimeout(chimeTimer);
       }
-
-      const chimeTimer = setTimeout(() => {
-        soundEffects.playLockChime();
-      }, 1400);
-
-      return () => clearTimeout(chimeTimer);
+    } else if (prevArtifactRef.current) {
+      // Returned back to planet view from selected model: restore proper orbital viewing angle
+      globeRef.current.pointOfView(
+        { lat: 15, lng: 50, altitude: 2.2 },
+        1400
+      );
+      prevArtifactRef.current = null;
     }
   }, [selectedArtifact, activePlanetId]);
 
