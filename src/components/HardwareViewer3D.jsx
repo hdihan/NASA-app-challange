@@ -8,7 +8,11 @@ import {
   Play,
   RotateCcw,
   Sparkles,
-  ArrowLeft
+  ArrowLeft,
+  ArrowUp,
+  ArrowDown,
+  ArrowRight,
+  Move
 } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
 
@@ -30,6 +34,7 @@ export default function HardwareViewer3D({
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRotating, setIsRotating] = useState(true);
+  const isRotatingRef = useRef(true);
   const [focusedSubName, setFocusedSubName] = useState(null);
 
   // References
@@ -43,15 +48,79 @@ export default function HardwareViewer3D({
   const gridRef = useRef(null);
   const prevSubIndexRef = useRef(null);
 
-  // Target animation state for camera fly-to
+  // Target animation state for camera fly-to and model reset
   const isTransitioningRef = useRef(false);
   const targetCamPosRef = useRef(new THREE.Vector3(3.2, 1.9, 3.8));
   const targetLookAtRef = useRef(new THREE.Vector3(0, 0, 0));
+  const targetModelPosRef = useRef(new THREE.Vector3(0, 0, 0));
+
+  // Model directional controls state (Forward, Backward, Sideways Left & Right)
+  const keysDownRef = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false
+  });
+  const [activeDirection, setActiveDirection] = useState(null);
+
+  // Helper to calculate camera-relative forward and right vectors
+  const getMoveVectors = () => {
+    if (!cameraRef.current) {
+      return { forward: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0) };
+    }
+    const forward = new THREE.Vector3();
+    cameraRef.current.getWorldDirection(forward);
+    forward.y = 0;
+    if (forward.lengthSq() < 0.0001) {
+      forward.set(0, 0, -1);
+    } else {
+      forward.normalize();
+    }
+    const right = new THREE.Vector3();
+    right.crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+    return { forward, right };
+  };
+
+  // Immediate step translation for crisp responsiveness on click or keypress
+  const applyStep = (direction, amount = 0.4) => {
+    if (!modelGroupRef.current) return;
+    soundEffects.playChirp(850, 0.04);
+    isRotatingRef.current = false;
+    setIsRotating(false);
+    isTransitioningRef.current = false;
+
+    const { forward, right } = getMoveVectors();
+    const move = new THREE.Vector3(0, 0, 0);
+    if (direction === 'forward') move.add(forward);
+    if (direction === 'backward') move.sub(forward);
+    if (direction === 'left') move.sub(right);
+    if (direction === 'right') move.add(right);
+
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(amount);
+      const pos = modelGroupRef.current.position;
+      pos.x = Math.max(-3.5, Math.min(3.5, pos.x + move.x));
+      pos.z = Math.max(-3.5, Math.min(3.5, pos.z + move.z));
+    }
+  };
+
+  // Manual Directional Control Handlers for on-screen D-Pad
+  const startMove = (direction) => {
+    applyStep(direction, 0.35);
+    keysDownRef.current[direction] = true;
+    setActiveDirection(direction);
+  };
+
+  const stopMove = (direction) => {
+    keysDownRef.current[direction] = false;
+    setActiveDirection((prev) => (prev === direction ? null : prev));
+  };
 
   // Toggle user-requested Pause / Resume Rotation directly
   const handleToggleRotation = () => {
     setIsRotating((prev) => {
       const next = !prev;
+      isRotatingRef.current = next;
       soundEffects.playChirp(next ? 1000 : 800);
       return next;
     });
@@ -66,6 +135,7 @@ export default function HardwareViewer3D({
     setFocusedSubName(sub.name);
 
     // Automatically pause rotation during focused inspection
+    isRotatingRef.current = false;
     setIsRotating(false);
 
     // Map using normalized local ratio from model's actual size
@@ -75,9 +145,10 @@ export default function HardwareViewer3D({
     const localTarget = new THREE.Vector3(rx * size.x, ry * size.y, rz * size.z);
     const worldTarget = localTarget.clone();
 
-    // Rotate local target to match current model rotation
+    // Rotate local target to match current model rotation & offset by model position
     if (modelGroupRef.current) {
       worldTarget.applyEuler(modelGroupRef.current.rotation);
+      worldTarget.add(modelGroupRef.current.position);
     }
 
     // Update 3D Glowing Subsystem Pulse Marker
@@ -115,11 +186,12 @@ export default function HardwareViewer3D({
     focusSubsystem(selectedSubsystemIndex);
   }, [selectedSubsystemIndex, focusSubsystem]);
 
-  // Reset Full Model View to Heroic 3/4 Perspective
+  // Reset Full Model View to Heroic 3/4 Perspective & Center Position
   const resetCameraView = () => {
     soundEffects.playFlyWhoosh();
     setFocusedSubName(null);
     prevSubIndexRef.current = null;
+    targetModelPosRef.current.set(0, 0, 0);
     targetLookAtRef.current.set(0, 0, 0);
     targetCamPosRef.current.set(3.2, 1.9, 3.8);
     isTransitioningRef.current = true;
@@ -179,6 +251,7 @@ export default function HardwareViewer3D({
 
     // Automatically pause auto-rotation when user drags with mouse/touch
     controls.addEventListener('start', () => {
+      isRotatingRef.current = false;
       setIsRotating(false);
     });
 
@@ -209,9 +282,9 @@ export default function HardwareViewer3D({
     topLight.position.set(0, 9, 0);
     scene.add(topLight);
 
-    // Ground Environment Disc & Grid Floor
+    // Ground Environment Disc & Grid Floor (expanded bounds for smooth rover/spacecraft exploration)
     const isOrbital = artifact.group === 'orbiter' || artifact.id === 'apollo-17';
-    const groundGeo = new THREE.CylinderGeometry(6.5, 6.5, 0.15, 64);
+    const groundGeo = new THREE.CylinderGeometry(35, 35, 0.2, 64);
     const groundMat = new THREE.MeshStandardMaterial({
       color: isMars ? 0x5a1e12 : 0x334155,
       roughness: 0.9,
@@ -225,7 +298,7 @@ export default function HardwareViewer3D({
     groundRef.current = ground;
 
     const gridColor = isMars ? 0xf97316 : 0x00e5ff;
-    const gridHelper = new THREE.GridHelper(12, 20, gridColor, 0x1e293b);
+    const gridHelper = new THREE.GridHelper(70, 70, gridColor, 0x1e293b);
     gridHelper.position.y = -1.12;
     gridHelper.visible = !isOrbital;
     scene.add(gridHelper);
@@ -346,23 +419,121 @@ export default function HardwareViewer3D({
     let pulseAngle = 0;
     const clock = new THREE.Clock();
 
+    // Keyboard controls for model translation (Forward, Backward, Sideways Left & Right)
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName?.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      let handled = false;
+      if (e.code === 'KeyW' || e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        if (!keysDownRef.current.forward) applyStep('forward', 0.35);
+        keysDownRef.current.forward = true;
+        setActiveDirection('forward');
+        handled = true;
+      } else if (e.code === 'KeyS' || e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        if (!keysDownRef.current.backward) applyStep('backward', 0.35);
+        keysDownRef.current.backward = true;
+        setActiveDirection('backward');
+        handled = true;
+      } else if (e.code === 'KeyA' || e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        if (!keysDownRef.current.left) applyStep('left', 0.35);
+        keysDownRef.current.left = true;
+        setActiveDirection('left');
+        handled = true;
+      } else if (e.code === 'KeyD' || e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        if (!keysDownRef.current.right) applyStep('right', 0.35);
+        keysDownRef.current.right = true;
+        setActiveDirection('right');
+        handled = true;
+      }
+
+      if (handled) {
+        isRotatingRef.current = false;
+        setIsRotating(false);
+        isTransitioningRef.current = false;
+        if (e.key.startsWith('Arrow')) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'KeyW' || e.key === 'ArrowUp') {
+        keysDownRef.current.forward = false;
+      } else if (e.code === 'KeyS' || e.key === 'ArrowDown') {
+        keysDownRef.current.backward = false;
+      } else if (e.code === 'KeyA' || e.key === 'ArrowLeft') {
+        keysDownRef.current.left = false;
+      } else if (e.code === 'KeyD' || e.key === 'ArrowRight') {
+        keysDownRef.current.right = false;
+      }
+      const anyActive = keysDownRef.current.forward || keysDownRef.current.backward || keysDownRef.current.left || keysDownRef.current.right;
+      if (!anyActive) {
+        setActiveDirection(null);
+      }
+    };
+
+    const handleBlur = () => {
+      keysDownRef.current.forward = false;
+      keysDownRef.current.backward = false;
+      keysDownRef.current.left = false;
+      keysDownRef.current.right = false;
+      setActiveDirection(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
     const animate = () => {
       reqId = requestAnimationFrame(animate);
       const delta = clock.getDelta();
 
-      // Gentle Turntable Rotation (0.08 rad/s)
-      if (isRotating && modelGroupRef.current && !isTransitioningRef.current) {
+      // Handle user-controlled model movement (Forward, Backward, Sideways Left & Right)
+      const isMoving =
+        keysDownRef.current.forward ||
+        keysDownRef.current.backward ||
+        keysDownRef.current.left ||
+        keysDownRef.current.right;
+
+      if (isMoving && modelGroupRef.current && !isTransitioningRef.current) {
+        const { forward, right } = getMoveVectors();
+        const moveDir = new THREE.Vector3(0, 0, 0);
+        if (keysDownRef.current.forward) moveDir.add(forward);
+        if (keysDownRef.current.backward) moveDir.sub(forward);
+        if (keysDownRef.current.left) moveDir.sub(right);
+        if (keysDownRef.current.right) moveDir.add(right);
+
+        if (moveDir.lengthSq() > 0) {
+          moveDir.normalize();
+          const speed = 2.8; // units per second
+          const step = moveDir.multiplyScalar(speed * delta);
+          const pos = modelGroupRef.current.position;
+          pos.x = Math.max(-3.5, Math.min(3.5, pos.x + step.x));
+          pos.z = Math.max(-3.5, Math.min(3.5, pos.z + step.z));
+        }
+      }
+
+      // Gentle Turntable Rotation (0.08 rad/s) when not moving or transitioning
+      if (isRotatingRef.current && modelGroupRef.current && !isTransitioningRef.current && !isMoving) {
         modelGroupRef.current.rotation.y += delta * 0.08;
       }
 
-      // Smooth camera gliding interpolation toward target
+      // Smooth camera and model gliding interpolation toward target (e.g. on Reset View)
       if (isTransitioningRef.current) {
+        if (modelGroupRef.current) {
+          modelGroupRef.current.position.lerp(targetModelPosRef.current, 0.08);
+        }
         camera.position.lerp(targetCamPosRef.current, 0.08);
         controls.target.lerp(targetLookAtRef.current, 0.08);
         if (
           camera.position.distanceTo(targetCamPosRef.current) < 0.015 &&
-          controls.target.distanceTo(targetLookAtRef.current) < 0.015
+          controls.target.distanceTo(targetLookAtRef.current) < 0.015 &&
+          (!modelGroupRef.current || modelGroupRef.current.position.distanceTo(targetModelPosRef.current) < 0.015)
         ) {
+          if (modelGroupRef.current) modelGroupRef.current.position.copy(targetModelPosRef.current);
+          camera.position.copy(targetCamPosRef.current);
+          controls.target.copy(targetLookAtRef.current);
           isTransitioningRef.current = false;
         }
       }
@@ -392,6 +563,9 @@ export default function HardwareViewer3D({
     return () => {
       cancelAnimationFrame(reqId);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
       dracoLoader.dispose();
       renderer.dispose();
     };
@@ -465,7 +639,7 @@ export default function HardwareViewer3D({
           <button
             onClick={resetCameraView}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-cyan-400 text-slate-200 hover:text-white font-heading text-xs font-bold transition-all cursor-pointer shadow-md"
-            title="Reset Camera to Heroic 3/4 Perspective"
+            title="Reset Camera & Center Position"
           >
             <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
             <span>Reset View</span>
@@ -485,6 +659,91 @@ export default function HardwareViewer3D({
               <span>Back to Planet</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Floating Directional Model Controls (WASD / Arrows / Touch D-Pad) */}
+      <div className="absolute bottom-5 right-4 z-20 flex flex-col items-center bg-slate-950/85 backdrop-blur-xl border border-cyan-500/30 p-2 rounded-2xl shadow-2xl select-none pointer-events-auto">
+        <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-cyan-300 mb-1">
+          <Move className="w-3 h-3 text-cyan-400" />
+          <span>DRIVE</span>
+        </div>
+
+        {/* D-Pad Buttons: Forward, Backward, Sideways Left & Right */}
+        <div className="grid grid-cols-3 gap-1">
+          <div />
+          <button
+            onMouseDown={() => startMove('forward')}
+            onMouseUp={() => stopMove('forward')}
+            onMouseLeave={() => stopMove('forward')}
+            onTouchStart={(e) => { e.preventDefault(); startMove('forward'); }}
+            onTouchEnd={() => stopMove('forward')}
+            onClick={() => applyStep('forward', 0.4)}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors shadow-sm cursor-pointer ${
+              activeDirection === 'forward'
+                ? 'bg-cyan-500 border-cyan-300 text-white shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                : 'bg-slate-900/90 hover:bg-cyan-950 border-slate-700/80 text-slate-200 hover:text-cyan-300'
+            }`}
+            title="Forward (W / Up Arrow)"
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+          </button>
+          <div />
+
+          <button
+            onMouseDown={() => startMove('left')}
+            onMouseUp={() => stopMove('left')}
+            onMouseLeave={() => stopMove('left')}
+            onTouchStart={(e) => { e.preventDefault(); startMove('left'); }}
+            onTouchEnd={() => stopMove('left')}
+            onClick={() => applyStep('left', 0.4)}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors shadow-sm cursor-pointer ${
+              activeDirection === 'left'
+                ? 'bg-cyan-500 border-cyan-300 text-white shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                : 'bg-slate-900/90 hover:bg-cyan-950 border-slate-700/80 text-slate-200 hover:text-cyan-300'
+            }`}
+            title="Sideways Left (A / Left Arrow)"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onMouseDown={() => startMove('backward')}
+            onMouseUp={() => stopMove('backward')}
+            onMouseLeave={() => stopMove('backward')}
+            onTouchStart={(e) => { e.preventDefault(); startMove('backward'); }}
+            onTouchEnd={() => stopMove('backward')}
+            onClick={() => applyStep('backward', 0.4)}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors shadow-sm cursor-pointer ${
+              activeDirection === 'backward'
+                ? 'bg-cyan-500 border-cyan-300 text-white shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                : 'bg-slate-900/90 hover:bg-cyan-950 border-slate-700/80 text-slate-200 hover:text-cyan-300'
+            }`}
+            title="Backward (S / Down Arrow)"
+          >
+            <ArrowDown className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onMouseDown={() => startMove('right')}
+            onMouseUp={() => stopMove('right')}
+            onMouseLeave={() => stopMove('right')}
+            onTouchStart={(e) => { e.preventDefault(); startMove('right'); }}
+            onTouchEnd={() => stopMove('right')}
+            onClick={() => applyStep('right', 0.4)}
+            className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-colors shadow-sm cursor-pointer ${
+              activeDirection === 'right'
+                ? 'bg-cyan-500 border-cyan-300 text-white shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                : 'bg-slate-900/90 hover:bg-cyan-950 border-slate-700/80 text-slate-200 hover:text-cyan-300'
+            }`}
+            title="Sideways Right (D / Right Arrow)"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="text-[8px] font-mono text-slate-400 mt-1 flex items-center gap-1">
+          <span>WASD / Arrows</span>
         </div>
       </div>
     </div>
