@@ -1,16 +1,38 @@
-# React + Vite
+# Echoes Beyond Earth — NASA Space Apps Challenge 2026 (Team BYTESTAR)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-Currently, two official plugins are available:
+🎖 **Galactic Problem Solver Award Recipient**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+An interactive 3D space exploration platform developed for the **NASA Space Apps Challenge 2026** challenge *"Abandoned but Not Forgotten"*, showcasing NASA's discarded equipment across the Moon and Mars with interactive AI narration and chat.
 
-## React Compiler
+---
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 🏆 Recognition & Certificate
 
-## Expanding the Oxlint configuration
+- **Event:** NASA Space Apps Challenge 2026
+- **Award:** Galactic Problem Solver Award
+- **Official PDF:** [NASA-Space-Apps-Challenge-2026-Certificate_ Dihan.pdf](https://github.com/user-attachments/files/35015430/NASA-Space-Apps-Challenge-2026-Certificate_.Dihan.pdf)
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+<img width="1005" height="778" alt="NASA Space Apps Challenge 2026 Certificate" src="https://github.com/user-attachments/assets/8dd6929f-bf5f-46f2-8248-c9c18dc49719" />
+
+---
+
+## 🛠️ Tech Stack
+
+### Frontend
+- React.js
+- Vite
+- Tailwind CSS
+
+### 3D Visualization
+- Three.js
+- React Globe GL
+
+### AI & Voice
+- Google Gemini API
+- ElevenLabs API
+- Web Speech API
+
+### Development Tools
+- Git & GitHub
+- VS Code
